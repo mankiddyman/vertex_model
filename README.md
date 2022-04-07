@@ -12,6 +12,7 @@ Python 3 version of this [original code](https://bitbucket.org/Pigueco/vertex_mo
 * numpy
 * matplotlib
 * numba
+* seaborn
 * ...
 
 
