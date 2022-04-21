@@ -43,18 +43,19 @@ a=r*k
 # adding the nuclear movement parameters to 'params'
 params = [K,G,L,k,D,s,a]
 
+np.random.seed(1999)
+rand = np.random.RandomState(1999)
+
 def run_sim (run_id):
     timestart = time.time()
     history = run_simulation_INM(params,duration,rand,type_)  # timend = 1 for test
     timeend = time.time()
     timer.timer(timestart,timeend)
-    with open (f"simulations/model_1_k{k}_D{D}_run_{run_id}.pkl", "wb") as file:
+    with open (f"simulations/model_1_k{k}_D{D}_run_{run_id}_sim-duration_{duration}.pkl", "wb") as file:
         dill.dump(history, file)
 
     return timeend - timestart
 
-np.random.seed(1999)
-rand = np.random.RandomState(1999)
 
 for run in range(1,int(no_simulations+1)):
 	run_sim(run)

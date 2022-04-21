@@ -77,7 +77,7 @@ timeend = time.time()
 timer.timer(timestart,timeend)
 
 import dill
-with open (f"simulations/model_2_k{k}_D{D}_run_{run_id}.pkl", "wb") as file:
+with open (f"simulations/model_2_k{k}_D{D}_run_{run_id}_sim-duration_{duration}.pkl", "wb") as file:
     dill.dump(history, file)
 
 

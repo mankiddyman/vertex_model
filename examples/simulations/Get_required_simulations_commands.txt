@@ -1,0 +1,13 @@
+instructions:
+
+go to the vertex_model/examples directory
+type the following
+for explanations of the parameters see test_M1.py
+
+
+python test_M1.py 100 0 0 1 150
+python test_M1.py 50 0 0 1 150
+python test_M1.py 5 0 0 1 150 
+python test_M1.py 5 0.01 0 1 150
+python test_M1.py 50 0.01 0 1 150
+python test_M1.PY 100 0.01 0 1 150
