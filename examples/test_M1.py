@@ -51,7 +51,7 @@ def run_sim (run_id):
     history = run_simulation_INM(params,duration,rand,type_)  # timend = 1 for test
     timeend = time.time()
     timer.timer(timestart,timeend)
-    with open (f"simulations/model_1_k{k}_D{D}_run_{run_id}_sim-duration_{duration}.pkl", "wb") as file:
+    with open (f"simulations/model_1_k_{k}_D_{D}_r_{r}_run_{run_id}_sim-duration_{duration}.pkl", "wb") as file:
         dill.dump(history, file)
 
     return timeend - timestart
