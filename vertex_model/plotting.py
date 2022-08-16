@@ -98,11 +98,12 @@ def _draw_geometry(geometry, ax=None):
         # ax.add_patch(plt.Rectangle((-0.5*w, -0.5*h), w, h, fill=False, linewidth=2.0))
 
 
-def draw(cells, ax=None, size=None):
+def draw(cells, ax=None, size=None,string_for_title="hi"):
     if not ax:
         fig = plt.figure()
         ax = fig.gca()  
     ax.cla()
+    ax.text(0,15,string_for_title,fontsize=20)
     facecolors = cells.properties.get('color', None)
 
     mesh = cells.mesh.recentre()
@@ -130,7 +131,7 @@ def animate(cells_array, facecolours='Default'):
     #to don't draw 
     fig = plt.figure()#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa
     ax = fig.gca()#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa
-    fig.set_size_inches(6, 6)#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa
+    fig.set_size_inches(100, 100)#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa yes
     for cells in cells_array:#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa
         draw(cells, ax, size)#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa
   #hasta aqui to don't draw        

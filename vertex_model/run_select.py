@@ -9,8 +9,10 @@
 # %matplotlib tk 
 #get_ipython().magic(u'matplotlib') #to use model.animate and see video alive
 import itertools
+import random
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import vertex_model as model
 import vertex_model.initialisation as init
 from vertex_model.forces import TargetArea, Tension, Perimeter, Pressure
@@ -18,8 +20,8 @@ import os
 import seaborn as sns
 import warnings
 warnings.filterwarnings('ignore') #Don't show warnings
-from .Gobal_Constant import dt, viscosity, t_G1, t_G2, t_S, A_c, J, pos_d, T1_eps, P, microns, time_hours, expansion_constant #file with necessary constants
-
+from vertex_model.Gobal_Constant import dt, viscosity, t_G1, t_G2, t_S, A_c, J, pos_d, T1_eps, P, microns, time_hours, expansion_constant #file with necessary constants
+import ipdb
 diff_rate_hours=0.05 #differentiation rate (1/h) 
 
 
@@ -163,7 +165,7 @@ def crowding_force (cells, a=1.0, s=0.1):
 
     # Get the ids of cells by their edges
     cell_ids = cells.mesh.face_id_by_edge   # ids of faces/cells
-    neig_ids = cell_ids[cells.mesh.reverse] # ids of their neighbours
+    neig_ids = cell_ids[cells.mesh.edges.reverse] # ids of their neighbours
 
     # position of nuclei in cells and their neighbours.
     z  = np.take(nucl_pos, cell_ids) # cells of interest
@@ -1037,7 +1039,189 @@ def simulation_with_division_clone_differenciation_3stripes_model_1(cells,force,
         cells.mesh = cells.mesh.moved(dv).scaled(1.0+expansion)
         
         yield cells         
+#simulation with division & INM with new formulation by Aaryan tldr: is that k now has time dependence, this is to allow different forces for g1 and g2 without having cells move to target positions blindly eg a cell that did not make it to the basal end by S phase would drop immediately to the basal end at the start of G2 where downard movement has not been described formulation below:
+'''
+dz/dt=K(t)(z_0 (t)−z_t )dt+√((2D)normal) (t)
+
+z_(t+1)=z_t+K(t)(z_0 (t)−z_t )dt
+
+-	G1	S	G2	M
+K	12	0	24	24
+z_0  	0	-	1	1
+Expected duration	0.4	0.33	0.16	0.11
+
+
+Active downard force by cytoskeleton^
+'''
+def simulation_with_division_model_5(cells,force,dt=dt,T1_eps=T1_eps,lifespan=100.0,rand=None):
+    lifespan=46800/460
+    random.seed(1999)
+    properties=cells.properties
+    properties['parent']=cells.mesh.face_ids
+    #save the ids to control division parents-daughters
+    properties['ageingrate']=np.random.normal(1.0/lifespan,0.2/lifespan,len(cells))
+    #degradation rate per each cell which varies by cell
+    properties['ids_division']=[] #save ids of the cell os the division when its ready per each time step
+    properties['force_x'] = []
+    properties['force_y'] = []
+    properties['T1_angle_pD'] = []
+    properties['Division_angle_pD'] = []
+    
+    properties['k(t)']=[0]*len(properties['zposn'])
+    #contains the current k term (inertia of INM) as a function of time, it is selected from the k array fed to this type of simulation
+
+    
+    
+    properties['force_z'] = []
+    
+    expansion = np.array([0.0,0.0])
+    iteration_tracker=0
+    while True:
+        if iteration_tracker%1000==0:
+            print(f"at timepoint {iteration_tracker/1000}")        
+        iteration_tracker+=1
+        #cells id where is true the division conditions: living cells & area greater than 2 & age cell in mitosis 
+        ready = np.where(~cells.empty() & (cells.mesh.area>=A_c) & (cells.properties['age']>=(t_G1+t_S+t_G2)) & (cells.properties['nucl_pos']>=0.75))[0]  # divides if nucleus pos > 0.75
+        if len(ready): #these are the cells ready to undergo division at the current timestep
+            properties['ageingrate'] =np.append(properties['ageingrate'], np.abs(np.random.normal(1.0/lifespan,0.2/lifespan,2*len(ready))))
+            properties['age'] = np.append(properties['age'],np.zeros(2*len(ready)))
+            properties['k(t)']=np.append(properties['k(t)'],np.zeros(2*len(ready)))
+            #appending 0 because it is determined outside of current if function
+            properties['zposn']=np.append(properties['zposn'],np.zeros(2*len(ready))) #appending 0 because it is determined outside of if function 
+            
+            properties['parent'] = np.append(properties['parent'],np.repeat(properties['parent'][ready],2))  # Daugthers and parent have the same ids
+            
+            # daughter cells = same positions as parents - do this NEXT
+            properties['nucl_pos'] = np.append(properties['nucl_pos'], np.ones(2*len(ready)))
+
+            properties['ids_division'] = ready
+            edge_pairs = [division_axis(cells.mesh,cell_id,rand) for cell_id in ready] #New edges after division 
+            cells.mesh = cells.mesh.add_edges(edge_pairs) #Add new edges in the mesh
+            for i in range(len(ready)):
+                commun_edges = np.intersect1d(cells.mesh.length[np.where(cells.mesh.face_id_by_edge==(cells.mesh.n_face-2*(i+1)))[0]],cells.mesh.length[np.where(cells.mesh.face_id_by_edge==(cells.mesh.n_face-1-2*i))[0]])
+                division_new_edge=np.where(cells.mesh.length==np.max(commun_edges))[0]
+                properties['Division_angle_pD']= np.append(properties['Division_angle_pD'],cells.mesh.edge_angle[division_new_edge][0])
+        #properties['age'] = properties['age']+dt*properties['ageingrate'] #add time step depending of the#properties['age_ready'] = properties['age'][ready] # get age of cells which are READY to divide
+
+        # IMPORTANT: add age ingrate only for alive cells
+        alivecells = np.where(~cells.empty())[0]
+        properties['age'][alivecells] += dt*properties['ageingrate'][alivecells] #add time step depending of the degradation rate 
         
+        #calculating z nuclei position now target position is either 0 or 1 and K has a time dependence depending on age 
+        N_G1=0
+        N_S=0
+        N_G2=1
+        N_M=1
+        #need to scale k between biological time and simulation time ; the scale is lifepan one cell divsion is 100 seconds
+        k_G1=properties['k'][0]/lifespan
+        k_S=properties['k'][1]/lifespan
+        k_G2=properties['k'][2]/lifespan
+        k_M=properties['k'][3]/lifespan
+        #now updating cells.properties['zposn'] by their age
+        #nucl_pos is now zposn and zposn is now either 0 or 1
+        n_of_cells=len(cells.properties['zposn'])
+        cells.properties['k(t)']=np.zeros(n_of_cells)
+        G1_index=np.where(np.logical_and(0<=cells.properties['age'],cells.properties['age']<t_G1))
+        S_index=np.where(np.logical_and(t_G1<=cells.properties['age'],cells.properties['age']<t_G1+t_S))
+        G2_index=np.where(np.logical_and(t_G1+t_S<=cells.properties['age'],cells.properties['age']<t_G1+t_S+t_G2))
+        M_index=np.where(cells.properties['age']>=t_G1+t_S+t_G2)
+        cells.properties['zposn'][G1_index]=N_G1
+        cells.properties['k(t)'][G1_index]=k_G1
+        cells.properties['zposn'][S_index]=N_S
+        cells.properties['k(t)'][S_index]=k_S
+        cells.properties['zposn'][G2_index]=N_G2
+        cells.properties['k(t)'][G2_index]=k_G2
+        cells.properties['zposn'][M_index]=N_M
+        cells.properties['k(t)'][M_index]=k_M
+        
+        # if iteration_tracker%1000==0:
+        #     plt.hist2d(properties['age'],properties['nucl_pos'],norm=mpl.colors.LogNorm(),bins=500)
+        #     plt.show()
+        properties['nucl_pos']=properties['nucl_pos']+properties['k(t)']*(properties['zposn']-properties['nucl_pos'])*dt + crowding_force(cells,a=properties['a'],s=properties['s'])*dt + np.sqrt(2*properties['D']*dt)*np.random.randn(len(properties['zposn']))
+        
+        max_nucl=np.array([min(i,1)for i in properties['nucl_pos']])
+        #nucl_pos cannot exceed 1
+        properties['nucl_pos']=max_nucl
+        #nucl_pos cannot be less than 0 
+        max_nucl=np.array([max(i,0)for i in properties['nucl_pos']])
+        properties['nucl_pos']=max_nucl
+        """Target area function depending age and z nuclei position"""
+        properties['A0'] = (properties['age']+1.0)*0.5*(1.0+max_nucl**2) # target area now depends on nucl_pos
+        #properties['A0_initial'] = (properties['age']+1.0)*0.5*(1.0+properties['zposn']**2) # initial
+        #CHANGE BY AARYAN TO MAKE it so that
+        '''
+        instead of having A0 determined by (1+nucl_pos^2) which has a shape like 
+       ┌────────────────────────────────────────────────┐
+A0 104 │⠀⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠀│ 
+       │⠀⠘⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠇⠀│
+       │⠀⠀⢱⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡜⠀⠀│
+       │⠀⠀⠀⢇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡸⠀⠀⠀│
+       │⠀⠀⠀⠘⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠃⠀⠀⠀│
+       │⠀⠀⠀⠀⠸⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠇⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠱⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠎⠀⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠣⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠎⠀⠀⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠱⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠎⠀⠀⠀⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠱⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠎⠀⠀⠀⠀⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⢀⠎⠀⠀⠀⠀⠀⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⢄⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⡠⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠣⡀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⢀⠜⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠒⢄⠀⠀⠀⠀⡇⠀⠀⠀⡠⠒⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀ │
+    -2 │⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠭⠵⠶⠤⡧⠴⠮⠭⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤│
+       └────────────────────────────────────────┘
+       ⠀-10.6⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀nucl_pos               10.6⠀
+
+       we want the following shape from (1+max(0,nucl_pos)^2))
+       ┌────────────────────────────────────────────────┐
+A0 104 │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠀│ 
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠇⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡜⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡸⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠃⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠇⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠎⠀⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠎⠀⠀⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠎⠀⠀⠀⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠎⠀⠀⠀⠀⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⢀⠎⠀⠀⠀⠀⠀⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⡠⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⢀⠜⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀│
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⡠⠒⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀│
+    -2 │⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⡧⠴⠮⠭⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤│
+       └────────────────────────────────────────┘
+       ⠀-10.6⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀Nucl_Pos⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀10.6⠀
+        '''
+
+         #############BAETTI VID
+        
+        #ath BAETTI D VID
+        cells.mesh , number_T1, d= cells.mesh.transition(T1_eps)  #check edges verifing T1 transition
+        #UNKNOWN BUG HERE NEEDS FIXING BY AARYAN
+        #if len(number_T1)>0:
+         #   for ii in number_T1:
+          #      index = cells.mesh.face_id_by_edge[ii]
+           #     properties['T1_angle_pD'] #=np.append(properties['T1_angle_pD'],cells.mesh.edge_angle[ii])
+        F = force(cells)/viscosity  #force per each cell force= targetarea+Tension+perimeter+pressure_boundary 
+
+        #EG BAETTI VID
+        len_modified=np.matrix.copy(cells.mesh.length)
+        #len_modified[np.where((properties['parent_group'][cells.mesh.face_id_by_edge]==1) & np.logical_not(properties['parent_group'][cells.mesh.face_id_by_edge[cells.mesh.edges.reverse]]==0))]*=0.12
+        
+        tens = (0.5*cells.by_edge('Lambda', 'Lambda_boundary')/len_modified)*cells.mesh.edge_vect
+        tens= tens - tens.take(cells.mesh.edges.prev, 1)
+        F+=tens
+
+        dv = dt*model.sum_vertices(cells.mesh.edges,F) #movement of the vertices using eq: viscosity*dv/dt = F
+        properties['force_x'] = F[0]*viscosity
+        properties['force_y'] = F[1]*viscosity   
+        
+        if hasattr(cells.mesh.geometry,'width'):
+            expansion[0] = expansion_constant*np.average(F[0]*cells.mesh.vertices[0])*dt/(cells.mesh.geometry.width**2)
+        if hasattr(cells.mesh.geometry,'height'): #Cylinder mesh doesn't have 'height' argument
+            expansion[1] = np.average(F[1]*cells.mesh.vertices[1])*dt/(cells.mesh.geometry.height**2)
+        cells.mesh = cells.mesh.moved(dv).scaled(1.0+expansion)
+        
+        yield cells       
+
 
 
 #_clones
@@ -1086,7 +1270,7 @@ def run_simulation_INM(x, timend,rand, sim_type):
     L=x[2]
 
     # parameters of the nucleus A-B stochastic dynamics
-    k=x[3]
+    k=x[3] #NB in aaryan_simulations this is an array
     D=x[4]
 
     # parameters of the crowding force
@@ -1094,9 +1278,11 @@ def run_simulation_INM(x, timend,rand, sim_type):
     a=x[6]
 
     rand1 = np.random.RandomState(123456) #I have modified the random function because RamdomState takes always the same numbers
+    rand.seed(1999)
     #mesh = init.cylindrical_hex_mesh(2,2,noise=0.2,rand=rand1)
     mesh = init.toroidal_hex_mesh(20,20,noise=0.2,rand=rand1)
     cells = model.Cells(mesh,properties={'K':K,'Gamma':G,'P':0.0,'boundary_P':P,'Lambda':L, 'Lambda_boundary':0.5})
+  
     cells.properties['age'] = np.random.rand(len(cells))
 
     force = TargetArea()  + Perimeter() + Pressure()
@@ -1155,9 +1341,15 @@ def run_simulation_INM(x, timend,rand, sim_type):
         cells.properties['s']=s
         cells.properties['a']=a
         history = run(simulation_with_division_model_4(cells,force,rand=rand),(timend)/dt,1.0/dt)
-   
- 
-        
+#added by aaryan
+    if sim_type==8:
+        cells.properties['k']=k
+        cells.properties['D']=D
+        cells.properties['s']=s
+        cells.properties['a']=a
+        zposn_list=list(cells.properties['zposn'])
+        cells.properties['nucl_pos']=np.array(zposn_list)
+        history=run(simulation_with_division_model_5(cells,force,rand=rand),(timend)/dt,1.0/dt)     
     return history
    
 

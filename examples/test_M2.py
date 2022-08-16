@@ -1,3 +1,4 @@
+#%%
 import itertools
 # get_ipython().magic(u'matplotlib inline')
 import numpy as np
@@ -14,8 +15,8 @@ import sys
 import dill 
 import time
 timestart = time.time()
-
-type_=5
+#%%
+type_=6
 
 # parameters of the vertex model
 G=0.075 #Cortical Contractility
@@ -25,6 +26,11 @@ K=1.0# Elastic energy coefficient
 # parameters of the nucleus A-B stochastic dynamics
 # sys.argv to pass from command line
 # call as, e.g.: python test_M1.py 100 0.15
+# k=100
+# D=0
+# r=0.1
+# no_simulations=1
+# duration=306
 k=float(sys.argv[1]) # 100
 D=float(sys.argv[2]) # 0.15
 r=float(sys.argv[3]) # size of crowding force relative to inertia constant #1
@@ -75,7 +81,7 @@ rand = np.random.RandomState(1999)
 
 # timeend = time.time()
 # timer.timer(timestart,timeend)
-
+#%%
 def run_sim (run_id):
     timestart = time.time()
     history = run_simulation_INM(params,duration,rand,type_)  # timend = 1 for test
@@ -92,3 +98,5 @@ for run in range(1,int(no_simulations+1)):
 
 
 
+
+# %%
