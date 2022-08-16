@@ -328,7 +328,13 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
     return[fig1,fig2,fig3,fig4,fig5,fig6,fig7,fig8,fig9,fig10]
 #now run the analyses
 #excluding constant =0
-experiment_names=index_of_simulation(model_type="active",k_g1=0,d=1e-5,duration=306)[1][3:6]
+#%% the plots
+#before
+#experiment_names=index_of_simulation(model_type="active",k_g1=0,d=1e-5,duration=306)[1][3:6]
+#after
+metadataframe=make_simulation_metadataframe()
+experiment_names=list(metadataframe.query('k_g1==0 and k_m==29 and D==1e-5 and duration==306.0 and 0.1<=a<=10').iloc[:,0])
+
 seperator='a'
 bins_list=[50,100,100,500,500,500,200,200,200]
 constant='k_g1'
@@ -380,3 +386,5 @@ for i in range(0,len(mixed_model_constant_k_g1)):
 
 
 
+
+# %%

@@ -8,6 +8,7 @@ import re
 import collections
 import numpy
 import sys
+from ast import literal_eval
 #need to list all files in simulations folder
 def remove_values_from_list(the_list, val):
    return [value for value in the_list if value != val]
@@ -212,6 +213,32 @@ def make_df(metadata_index):#NB pass only one experiment at a time
     df_master.to_csv(filepath,index=False)
     return df_master
 
+def retrieve_sim_metadata(sim_name): #function to be used in make_simulation_metadataframe() where u pass a simulation name and it returns each parameter
+    #retrieving each parameter from string parsing of .pkl file
+    file_name=sim_name
+    model_type=re.search(r"model_(.*)_k",sim_name).group(1)
+    k_list=literal_eval(re.search(r"k_(.*)_D",sim_name).group(1))
+    k_g1=k_list[0]
+    k_s=k_list[1]
+    k_g2=k_list[2]
+    k_m=k_list[3]
+    D=float(re.search(r"D_(.*)_a",sim_name).group(1))
+    a=float(re.search(r"a_(.*)_run",sim_name).group(1))
+    run=int(re.search(r"run_(.*)_sim",sim_name).group(1))
+    duration=float(re.search(r"_sim-duration_(.*).pkl",sim_name).group(1))
+    return [file_name,model_type,k_g1,k_s,k_g2,k_m,D,a,run,duration]
 
+def make_simulation_metadataframe(): #will make a dataframe containing simulation metadata to retrieve particular simulations with ease.\
+    #first list every simulation
+    all_sims=make_metadata_dic()
+    #now running retrieve_sim_metadata on each file
+    parameters=[]
+    for i in range(0,len(all_sims)):
+        parameters.append(retrieve_sim_metadata(all_sims[i]))
+    df=pd.DataFrame(parameters)
+    df.columns=['file_name','model_type','k_g1','k_s','k_g2','k_m','D','a','run','duration']
+    
+    
+    return(df)
 #%%
 
