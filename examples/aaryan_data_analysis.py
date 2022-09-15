@@ -1,4 +1,8 @@
 #%%
+from pickle import FALSE
+from collections import Counter
+from nis import cat
+import math
 from re import A
 from IPython.display import HTML
 from curses import meta
@@ -33,6 +37,7 @@ from vertex_model import script_for_memory_issues
 from vertex_model.script_for_memory_issues import *
 from vertex_model.run_select import *
 from textwrap import wrap
+from itertools import chain
 matplotlib.rc('font', family='sansserif', serif='cm10')
 matplotlib.rc('text', usetex=True)
 matplotlib.rcParams['text.latex.preamble'] = [r'\boldmath']
@@ -45,11 +50,13 @@ def save_multi_image(filename):
         fig.savefig(pp, format='pdf')
     pp.close()
 metadata_dic=simulation_parser.make_metadata_dic()
-
+sns.set(rc={"figure.dpi":500, 'savefig.dpi':500})
 t_G1=0.4
 t_S=0.33
 t_G2=0.16
 t_M=0.11
+metadataframe=make_simulation_metadataframe()
+palette=['b','orange','green','red','purple']
 #%%
 #function for 3 histograms
 def plot_3_histograms(experiment_names,bins_list,seperator,constant):
@@ -65,10 +72,15 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
     del df
     for col in ['file_index', 'file_name', 'time_point', 'cell_index', 'dead', 'k_g1','D','time','a',"n_neighbours"]:
             df_master[col]=df_master[col].astype('category')
-        
+    df_master['dead']=df_master['dead'].astype('bool')    
 
     palette=['b','orange','green','red','purple']
+    #applying thermalised cells filter
+    max_thermal_cell_index=max(df_master.loc[(df_master.time==1)].cell_index)
+    df_master=df_master.query(f'cell_index > {max_thermal_cell_index}')
+
 #now histogram of Area segregated by seperator, additionally want labels of critical area.
+    
     #first need to get only alive cells at final timepoint
     df_alive_final_timepoint=df_master.loc[(df_master.dead==False)&(df_master.time==306)]
     #now i want to collect A seperated by seperator
@@ -147,7 +159,7 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
         nuclear_positions[i]=df_alive.loc[(df_alive[seperator]==seperator_list[i])]['nucl_pos']
         ages[i]=df_alive.loc[(df_alive[seperator]==seperator_list[i])]['age']
     fig4,ax=plt.subplots(dpi=500,)
-    plt.hist2d(ages[0],nuclear_positions[0],bins=bins_list[3],norm=mpl.colors.LogNorm())
+    plt.hist2d(ages[0],nuclear_positions[0],bins=bins_list[3],norm=mpl.colors.LogNorm(),cmap='inferno')
     cb=plt.colorbar(label="$Log_{10}($Count in bin$)$")
     plt.xlabel("Age (AU)")
     plt.ylabel("Nuclear_position (AU)")
@@ -178,7 +190,7 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
      bbox=dict(facecolor='none', alpha=0.5))
 
     fig5,ax=plt.subplots(dpi=500)
-    plt.hist2d(ages[1],nuclear_positions[1],bins=bins_list[4],norm=mpl.colors.LogNorm())
+    plt.hist2d(ages[1],nuclear_positions[1],bins=bins_list[4],norm=mpl.colors.LogNorm(),cmap='inferno')
     cb=plt.colorbar(label="$Log_{10}($Count in bin$)$")
     plt.xlabel("Age (AU)")
     plt.ylabel("Nuclear_position (AU)")
@@ -209,7 +221,7 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
 
 
     fig6,ax=plt.subplots(dpi=500)
-    plt.hist2d(ages[2],nuclear_positions[2],bins=bins_list[5],norm=mpl.colors.LogNorm())
+    plt.hist2d(ages[2],nuclear_positions[2],bins=bins_list[5],norm=mpl.colors.LogNorm(),cmap='inferno')
     cb=plt.colorbar(label="$Log_{10}($Count in bin$)$")
     plt.xlabel("Age (AU)")
     plt.ylabel("Nuclear_position (AU)")
@@ -239,27 +251,28 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
      verticalalignment='center',
      bbox=dict(facecolor='none', alpha=0.5))
 
-    #%% now making neighbour-neighbour plot
+  
     #we need alive cells at final timepoint
     df_alive_final_timepoint['neighbour_ids']=[i[1:-1].split(",") for i in df_alive_final_timepoint['neighbour_ids']]
     
     a=[[],[],[]]
     b=[[],[],[]]
     n=[[],[],[]]
-    for iii in range(0,len(seperator_list)):
+    for iii in range(0,len(seperator_list)):#iii is the seperator
         df=df_alive_final_timepoint.loc[df_alive_final_timepoint[seperator]==seperator_list[iii]]
         n[iii]=len(df)
-        for i in range(0,len(df['neighbour_ids'])):
+        for i in range(0,len(df['neighbour_ids'])): # i is each cell in each seperated simulation
             neighbours=df['neighbour_ids'].iloc[i]
             neighbours=[int(j) for j in neighbours]
-            for ii in range(0,len(neighbours)):
-                a[iii].append(df['apical_area'].iloc[i])
-                b[iii].append(df.loc[df.cell_index==neighbours[ii]]['apical_area'].values[0])
+            for ii in range(0,len(neighbours)): #ii is the index of the i'th cell's neighbour
+                if df.loc[df.cell_index==neighbours[ii]].empty==False:
+                    a[iii].append(df['apical_area'].iloc[i])
+                    b[iii].append(df.loc[df.cell_index==neighbours[ii]]['apical_area'].values[0])
     
     
     fig7, ax=plt.subplots(dpi=500)
     
-    plt.hexbin(a[0], b[0],gridsize=bins_list[6],  norm=mpl.colors.LogNorm())
+    plt.hexbin(a[0], b[0],gridsize=bins_list[6],  norm=mpl.colors.LogNorm(),linewidths=0.2,cmap='inferno')
 
     z = np.linspace(0,max(a[0]))
     plt.plot(z,z, marker=",", alpha=1,color='r',)
@@ -276,7 +289,7 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
     
     fig8, ax=plt.subplots(dpi=500)
     
-    plt.hexbin(a[1], b[1],gridsize=bins_list[7],  norm=mpl.colors.LogNorm())
+    plt.hexbin(a[1], b[1],gridsize=bins_list[7],  norm=mpl.colors.LogNorm(),linewidths=0.2,cmap='inferno')
 
     z = np.linspace(0,max(a[1]))
     plt.plot(z,z, marker=",", alpha=1,color='r',)
@@ -292,7 +305,7 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
     
     fig9, ax=plt.subplots(dpi=500)
     
-    plt.hexbin(a[2], b[2],gridsize=bins_list[8],  norm=mpl.colors.LogNorm())
+    plt.hexbin(a[2], b[2],gridsize=bins_list[8],  norm=mpl.colors.LogNorm(),linewidths=0.2,cmap='inferno')
 
     z = np.linspace(0,max(a[2]))
     plt.plot(z,z, marker=",", alpha=1,color='r',)
@@ -315,15 +328,51 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
         n_neighbours[i]=df_alive_final_timepoint.loc[(df_alive_final_timepoint[seperator]==seperator_list[i])]['n_neighbours']
     df_alive_final_timepoint['n_neighbours']=pd.to_numeric(df_alive_final_timepoint['n_neighbours'])
     df_alive_final_timepoint['a']=pd.to_numeric(df_alive_final_timepoint['a'])
+
+    seperator_vector=[]
+    for i in range(0,len(n_neighbours)):
+        seperator_vector.append([seperator_list[i]]*len(n_neighbours[i])) 
+    #now going to make dataframe of n_neighbours and the associated seperator
+    #unnesting these two lists
+    n_neighbours=list(chain.from_iterable(n_neighbours))
+    seperator_vector=list(chain.from_iterable(seperator_vector))
+    df=pd.DataFrame({'n_neighbours': n_neighbours,f'{seperator}':seperator_vector})
+ 
+        #The data
+    a=df.query(f'{seperator}=={seperator_list[0]}')['n_neighbours']
+    b=df.query(f'{seperator}=={seperator_list[1]}')['n_neighbours']
+    c=df.query(f'{seperator}=={seperator_list[2]}')['n_neighbours']
+
+    categories=list(set(df['n_neighbours']))
     
-   
-    fig10, ax=plt.subplots(dpi=500)
-    sns.set_style('whitegrid')
+    x=[]
+    y=[]
+    z=[]
+    for i in range(0,len(categories)):
+        x.append(Counter(a)[categories[i]])
+        y.append(Counter(b)[categories[i]])
+        z.append(Counter(c)[categories[i]])
+    x=np.array(x)
+    y=np.array(y)
+    z=np.array(z)
+    counts=list(x)+list(y)+list(z)
+    proportion=list(x/sum(x))+list(y/sum(y))+list(z/sum(z))
+
+    seperator_legend_label=list(chain.from_iterable([[f'{seperator_list[0]}, n={len(a)}']*len(categories),[f'{seperator_list[1]}, n={len(b)}']*len(categories),[f'{seperator_list[2]}, n={len(c)}']*len(categories)]))
+
+    df_counts=pd.DataFrame({f'{seperator}':seperator_legend_label,'n_neighbours':categories*3,'counts':counts,'proportion':proportion})
+
     
-    ax= sns.boxplot(x=seperator,y='n_neighbours',data=df_alive_final_timepoint)
-    plt.ylabel("Number of neighbours")
-    title = ax.set_title("\n".join(wrap(f"{constant} = "+f"{df_alive_final_timepoint[constant].iloc[0]}, "+f"$D$ = {df_alive_final_timepoint['D'].iloc[0]}, ", 60)))
-    title.set_y(1.05)
+    fig10=plt.figure()
+    p=sns.barplot(data=df_counts,x='n_neighbours',y='proportion',hue=f'{seperator}',palette=sns.color_palette('Blues',3))
+    p.set_title(("\n".join(wrap(f"{constant} = "+f"{df_alive_final_timepoint[constant].iloc[0]}, "+f"$D$ = {df_alive_final_timepoint['D'].iloc[0]}, ", 60))))
+    fig10=p.figure
+
+    #now gonna be writing a trajectory plot function
+    #first gonna take out useless collumn from df_master
+    #I need time, cell_index, age, k_g1, D, a, neighbour_ids, n_neighbours, apical_area ,dead , nucl_pos
+
+    df_trajectory=df_master[["time", "cell_index" ,"dead", "n_neighbours","neighbour_ids","k_g1", "D", "a", "age", "apical_area"  , "nucl_pos"]].copy()
     
     return[fig1,fig2,fig3,fig4,fig5,fig6,fig7,fig8,fig9,fig10]
 #now run the analyses
@@ -333,7 +382,8 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
 #experiment_names=index_of_simulation(model_type="active",k_g1=0,d=1e-5,duration=306)[1][3:6]
 #after
 metadataframe=make_simulation_metadataframe()
-experiment_names=list(metadataframe.query('k_g1==0 and k_m==29 and D==1e-5 and duration==306.0 and 0.1<=a<=10').iloc[:,0])
+#now we are gonna conduct analysis on type 9 - new age equation
+experiment_names=list(metadataframe.query('k_g1==0 and k_m==29 and model_type=="active_10"and D==1e-5 and duration==306.0 and 0.1<=a<=10').iloc[:,0])
 
 seperator='a'
 bins_list=[50,100,100,500,500,500,200,200,200]
@@ -341,10 +391,10 @@ constant='k_g1'
 passive_model=plot_3_histograms(experiment_names=experiment_names,seperator=seperator,bins_list=bins_list,constant=constant)
 
 for i in range(0,len(passive_model)):
-    passive_model[i].savefig(os.path.join("output","passive_model",f"fig{i}.png"))
+    passive_model[i].savefig(os.path.join("output","passive_model",f"fig{i}.jpg"))
 
 
-experiment_names=index_of_simulation(model_type="active",a=0,d=1e-5,duration=306)[1][1:]
+experiment_names=list(metadataframe.query('a==0 and D==1e-5 and duration==306 and model_type=="active_10"and (k_g1==1 or k_g1==6 or k_g1==12)').iloc[:,0])
 seperator='k_g1'
 bins_list=[50,150,80,500,500,500,200,200,200]
 constant='a'
@@ -352,39 +402,38 @@ active_model=plot_3_histograms(experiment_names=experiment_names,seperator=seper
 
 
 for i in range(0,len(passive_model)):
-    active_model[i].savefig(os.path.join("output","active_model",f"fig{i}.png"))
+    active_model[i].savefig(os.path.join("output","active_model",f"fig{i}.jpg"))
 
 #now mixed model
-experiment_names=index_of_simulation(model_type="active",a=1,d=1e-5,duration=306)[1][1:]
+experiment_names=list(metadataframe.query('a==1 and D==1e-5 and model_type=="active_10" and duration==306 and (k_g1==1 or k_g1==6 or k_g1==12)').iloc[:,0])
+
 seperator='k_g1'
 bins_list=[50,150,80,500,500,500,200,200,200]
 constant='a'
 mixed_model_constant_a=plot_3_histograms(experiment_names=experiment_names,seperator=seperator,bins_list=bins_list,constant=constant)
 
 for i in range(0,len(mixed_model_constant_a)):
-    mixed_model_constant_a[i].savefig(os.path.join("output","mixed_model_constant_a",f"fig{i}.png"))
+    mixed_model_constant_a[i].savefig(os.path.join("output","mixed_model_constant_a",f"fig{i}.jpg"))
 
-experiment_names=index_of_simulation(model_type="active",k_g1=6,d=1e-5,duration=306)[1][1:]
+
+experiment_names=list(metadataframe.query('k_g1==6 and duration ==306 and model_type=="active_10" and  D==1e-5 and a!=0').iloc[:,0])
 seperator='a'
 bins_list=[50,150,80,500,500,500,200,200,200]
 constant='k_g1'
 mixed_model_constant_k_g1=plot_3_histograms(experiment_names=experiment_names,seperator=seperator,bins_list=bins_list,constant=constant)
 
 for i in range(0,len(mixed_model_constant_k_g1)):
-    mixed_model_constant_k_g1[i].savefig(os.path.join("output","mixed_model_constant_k_g1",f"fig{i}.png"))
+    mixed_model_constant_k_g1[i].savefig(os.path.join("output","mixed_model_constant_k_g1",f"fig{i}.jpg"))
 
 
-# experiment_names=index_of_simulation(model_type="active",k_g1=0,a=0.1,d=1e-5,duration=306)[1][0:2]
-# experiment_names.append(index_of_simulation(model_type="active",k_g1=0,a=0.1,d=1e-5,duration=306)[1][- 1])
-# seperator='k_g2'
-# bins_list=[50,150,80,500,500,500,200,200,200]
-# constant='k_g1'
-# mixed_model_constant_super_g2=plot_3_histograms(experiment_names=experiment_names,seperator=seperator,bins_list=bins_list,constant=constant)
-
-# for i in range(0,len(mixed_model_constant_k_g1)):
-#     mixed_model_constant_k_g1[i].savefig(os.path.join("output","mixed_model_constant_k_g1",f"fig{i}.png"))
-
-
-
-
+#now plotting new experiments with a<0.1
+#so far we have explored a=[1e1,1e0,1e-1]
+#now gonna do a=[1e-2,1e-3,1e-4]
+experiment_names=list(metadataframe.query('k_g1==0 and k_m==29 and duration ==306 and model_type=="active_10" and D==1e-5 and 1e-5<a<=1e-2').iloc[:,0])
+seperator='a'
+bins_list=[50,150,80,500,500,500,200,200,200]
+constant='k_g1'
+passive_model_micro_crowding=plot_3_histograms(experiment_names=experiment_names,seperator=seperator,bins_list=bins_list,constant=constant)
+for i in range(0,len(passive_model_micro_crowding)):
+    passive_model_micro_crowding[i].savefig(os.path.join("output","passive_model_micro_crowding",f"fig{i}.jpg"))
 # %%

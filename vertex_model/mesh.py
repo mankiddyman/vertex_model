@@ -151,6 +151,26 @@ class Mesh(object):
     def recentre(self):
         mesh = self.copy()
         return mesh.geometry.recentre(mesh)
+    
+    def neighbours (self):
+        '''
+        Returns the number of neighbours for each cell.
+        '''
+        return np.bincount(self.face_id_by_edge, minlength=self.n_face)
+    
+    def centres(self):
+        '''
+        Centres of each face (polygonal cell)
+        '''
+
+        sides=self.neighbours()
+        sides[sides==0.]== 1. #sets location where sides==0 to 1
+        #to have well defined division by number of sides
+        centres_x=np.bincount(self.face_id_by_edge, self.vertices[0], self.n_face)/sides
+        centres_y=np.bincount(self.face_id_by_edge,self.vertices[1], self.n_face)/sides
+        centres=np.vstack((centres_x,centres_y))
+        centres[:,np.where(self._edge_lookup==-1)]==np.nan #setting dead cells with no real edge to have nan centre
+        return centres
 
     def has_boundary(self):
         return self.boundary_faces is not None

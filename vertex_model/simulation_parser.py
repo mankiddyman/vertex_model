@@ -144,7 +144,7 @@ def index_of_simulation(model_type="none",k_g1="none",k_g2="none",k_s="none",k_m
     matches_filename=list(dict.fromkeys(matches_filename))       
     return [matches_index,matches_filename]
     #need to take a file and parse its k and stuff
-    # %%
+# %%
 def get_time(input):
     output=re.search(r"timepoint.*$",str(input))[0]
     return output
@@ -168,7 +168,7 @@ def make_df(metadata_index):#NB pass only one experiment at a time
         df['time_point']=df["file_name"].apply(get_time)
         df['time']=[int(re.search(r"timepoint_(.*)_of_",i).group(1)) for i in df['time_point']]
         df['cell_index']=range(0,numRows)
-      
+        df['parent']=a.properties['parent']
         df["K"]=[a.properties['K']]*numRows
         if df['file_name'][0].startswith("model_active"):
             df['k(t)']=a.properties['k(t)']
@@ -208,6 +208,8 @@ def make_df(metadata_index):#NB pass only one experiment at a time
         df['neighbour_ids']=df['neighbour_ids'].apply(list)
         df['n_neighbours']=df['neighbour_ids'].apply(len)
         df_master=pd.concat([df_master,df])
+        df['x_centre']=a.mesh.centres()[0]
+        df['y_centre']=a.mesh.centres()[1]
         del df
     filepath=os.path.join("simulations",experiment_metadata[:-3]+"csv")
     df_master.to_csv(filepath,index=False)
