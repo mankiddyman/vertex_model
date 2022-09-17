@@ -1715,7 +1715,7 @@ we are doing 3d crowding equation but only taking into account adjacent neighbou
 
 """
 
-def simulation_with_division_model_7(cells,force,dt=dt,T1_eps=T1_eps,lifespan=100.0,rand=None):
+def simulation_with_division_model_8(cells,force,dt=dt,T1_eps=T1_eps,lifespan=100.0,rand=None):
     lifespan=46800/460
     random.seed(1999)
     properties=cells.properties
@@ -1739,7 +1739,7 @@ def simulation_with_division_model_7(cells,force,dt=dt,T1_eps=T1_eps,lifespan=10
     expansion = np.array([0.0,0.0])
     iteration_tracker=0
     while True:
-        if iteration_tracker%10==0:
+        if iteration_tracker%1000==0:
             print(f"at timepoint {iteration_tracker/1000}")        
         iteration_tracker+=1
         #cells id where is true the division conditions: living cells & area greater than 2 & age cell in mitosis 
@@ -1991,6 +1991,14 @@ def run_simulation_INM(x, timend,rand, sim_type):
         zposn_list=list(cells.properties['zposn'])
         cells.properties['nucl_pos']=np.array(zposn_list)
         history=run(simulation_with_division_model_7(cells,force,rand=rand),(timend)/dt,1.0/dt)
+    if sim_type==11: #same as type 9 but with new crowding eqn
+        cells.properties['k']=k
+        cells.properties['D']=D
+        cells.properties['s']=s
+        cells.properties['a']=a
+        zposn_list=list(cells.properties['zposn'])
+        cells.properties['nucl_pos']=np.array(zposn_list)
+        history=run(simulation_with_division_model_8(cells,force,rand=rand),(timend)/dt,1.0/dt)
     return history
    
 
