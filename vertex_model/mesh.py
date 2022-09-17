@@ -162,7 +162,7 @@ class Mesh(object):
         '''
         Centres of each face (polygonal cell)
         '''
-
+        np.seterr(invalid='ignore') 
         sides=self.neighbours()
         sides[sides==0.]== 1. #sets location where sides==0 to 1
         #to have well defined division by number of sides

@@ -57,6 +57,16 @@ t_G2=0.16
 t_M=0.11
 metadataframe=make_simulation_metadataframe()
 palette=['b','orange','green','red','purple']
+
+#%%
+#testing cells objects
+"""
+metadata_index=0
+experiment_metadata=make_metadata_dic()[metadata_index]
+print(experiment_metadata)
+new_dict=make_simulations_dic(metadata_index)
+cells=list(new_dict.values())[0] #timepoint 0
+"""
 #%%
 #function for 3 histograms
 def plot_3_histograms(experiment_names,bins_list,seperator,constant):
@@ -437,3 +447,5 @@ passive_model_micro_crowding=plot_3_histograms(experiment_names=experiment_names
 for i in range(0,len(passive_model_micro_crowding)):
     passive_model_micro_crowding[i].savefig(os.path.join("output","passive_model_micro_crowding",f"fig{i}.jpg"))
 # %%
+
+

@@ -196,20 +196,20 @@ def make_df(metadata_index):#NB pass only one experiment at a time
             df['r']=0
         elif experiment_metadata.startswith("model_active"):
             df['a']=[a.properties['a']]*numRows
-           
+        df['x_centre']=list(a.mesh.centres()[0])
+        df['y_centre']=list(a.mesh.centres()[1])
         df['neighbour_ids']=0*numRows 
         temp_list=[]
         for j in range(0,numRows):
             temp_list.append(neighbour_finder(a,j))
         df['neighbour_ids']=temp_list
-        for col in ['file_index', 'file_name', 'time_point', 'cell_index', 'K', 'Gamma','Lambda', 'dead', 'parent', 'A0','D']:
+        for col in ['file_index', 'file_name', 'time_point', 'cell_index', 'K', 'Gamma','Lambda', 'dead', 'parent', 'A0','D','x_centre','y_centre']:
             
             df[col]=df[col].astype('category')
         df['neighbour_ids']=df['neighbour_ids'].apply(list)
         df['n_neighbours']=df['neighbour_ids'].apply(len)
         df_master=pd.concat([df_master,df])
-        df['x_centre']=a.mesh.centres()[0]
-        df['y_centre']=a.mesh.centres()[1]
+   
         del df
     filepath=os.path.join("simulations",experiment_metadata[:-3]+"csv")
     df_master.to_csv(filepath,index=False)
