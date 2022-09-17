@@ -195,7 +195,8 @@ def crowding_force (cells, a=1.0, s=0.1):
     return force
 
 from vertex_model.simulation_parser import neighbour_finder
-def crowding_force_3d_adjacent(cells,a=0.1,s=0.1):
+
+def crowding_force_3d_adjacent(cells,a=0.1,s=0.1,degree=1):#degree is number of neighbours to consider eg only adjacent cells is degree 1, adjacent cells plus their neighbours is degree 2
     #this is crowding_force_2 but only taking into account interactions between cells and their adjacent neighbours
     n_cells=cells.mesh.n_face
     [x_array,y_array]=cells.mesh.centres()
@@ -206,9 +207,66 @@ def crowding_force_3d_adjacent(cells,a=0.1,s=0.1):
 
     
     # Get the ids of cells by their edges
+    #cell_ids[0] is face id of edge 0
+    #neigh ids is the face id of the reverse of each edge
+    #%%
     cell_ids = cells.mesh.face_id_by_edge   # ids of faces/cells
-    neig_ids = cell_ids[cells.mesh.edges.reverse] # ids of their neighbours
+    if degree==1:
+        neig_ids = cell_ids[cells.mesh.edges.reverse] # ids of their neighbours
+    if degree==2:
+        neig_ids = cell_ids[cells.mesh.edges.reverse]
+        unique_cell_ids, n_neighbours_unique_cell_ids=np.unique(cell_ids,return_counts=True)
+        unique_cell_ids_neighbours=[neig_ids[np.where(cell_ids==i)] for i in unique_cell_ids]
+        cell_ids_to_append=[]# [the number of neighbours of cell a + the number of neighbours for each of a's neigbours]
+        neig_ids_to_append=[]
+       
+        for i in range(0,len(unique_cell_ids)):#i is cell a, ii is cell a's iith neighbour
+            temp_list_neig_ids=[]
+            for ii in range(0,n_neighbours_unique_cell_ids[i]):
+                listy=unique_cell_ids_neighbours[int(np.where(unique_cell_ids==unique_cell_ids_neighbours[i][ii])[0])]
+                temp_list_neig_ids.extend(listy)
+                #cell i is repeated n_neighbours_unique_cell_ids[i] times
+            
+            temp_list_neig_ids=np.unique(temp_list_neig_ids)
+            cell_ids_to_append.extend([unique_cell_ids[i]]*len(temp_list_neig_ids))
+            neig_ids_to_append.extend(temp_list_neig_ids)
+        cell_ids_to_append=np.array(cell_ids_to_append)
+        neig_ids_to_append=np.array(neig_ids_to_append)
 
+
+        cell_ids=cell_ids_to_append
+        neig_ids=neig_ids_to_append
+        
+    if degree==3:
+        neig_ids = cell_ids[cells.mesh.edges.reverse]
+        unique_cell_ids, n_neighbours_unique_cell_ids=np.unique(cell_ids,return_counts=True)
+        unique_cell_ids_neighbours=[neig_ids[np.where(cell_ids==i)] for i in unique_cell_ids]
+        cell_ids_to_append=[]# [the number of neighbours of cell a + the number of neighbours for each of a's neigbours]
+        neig_ids_to_append=[]
+    
+        for i in range(0,len(unique_cell_ids)):#i is cell a, ii is cell a's iith neighbour
+            temp_list_neig_ids=[]
+            for ii in range(0,n_neighbours_unique_cell_ids[i]):
+                
+                cell_ii_index=int(np.where(unique_cell_ids==unique_cell_ids_neighbours[i][ii])[0])
+                
+                for iii in range(0,n_neighbours_unique_cell_ids[cell_ii_index]):
+                        listy=unique_cell_ids_neighbours[int(np.where(unique_cell_ids==unique_cell_ids_neighbours[int(np.where(unique_cell_ids==unique_cell_ids_neighbours[i][ii])[0])][iii])[0])]
+                        temp_list_neig_ids.extend(listy)
+                        
+                
+            temp_list_neig_ids=np.unique(temp_list_neig_ids)
+            cell_ids_to_append.extend([unique_cell_ids[i]]*len(temp_list_neig_ids))
+            neig_ids_to_append.extend(temp_list_neig_ids)
+        #%%
+        cell_ids_to_append=np.array(cell_ids_to_append)
+        neig_ids_to_append=np.array(neig_ids_to_append)
+
+
+
+        cell_ids=cell_ids_to_append
+        neig_ids=neig_ids_to_append
+        
     # position of nuclei in cells and their neighbours.
     z  = np.take(z_array, cell_ids) # cells of interest
     zn = np.take(z_array, neig_ids) # their neighbours
@@ -1715,7 +1773,7 @@ we are doing 3d crowding equation but only taking into account adjacent neighbou
 
 """
 
-def simulation_with_division_model_8(cells,force,dt=dt,T1_eps=T1_eps,lifespan=100.0,rand=None):
+def simulation_with_division_model_8(cells,force,dt=dt,T1_eps=T1_eps,lifespan=100.0,rand=None,degree=1):
     lifespan=46800/460
     random.seed(1999)
     properties=cells.properties
@@ -1799,7 +1857,7 @@ def simulation_with_division_model_8(cells,force,dt=dt,T1_eps=T1_eps,lifespan=10
         # if iteration_tracker%1000==0:
         #     plt.hist2d(properties['age'],properties['nucl_pos'],norm=mpl.colors.LogNorm(),bins=500)
         #     plt.show()
-        properties['nucl_pos']=properties['nucl_pos']+properties['k(t)']*(properties['zposn']-properties['nucl_pos'])*dt + crowding_force_3d_adjacent(cells,a=properties['a'],s=properties['s'])*dt + np.sqrt(2*properties['D']*dt)*np.random.randn(len(properties['zposn']))
+        properties['nucl_pos']=properties['nucl_pos']+properties['k(t)']*(properties['zposn']-properties['nucl_pos'])*dt + crowding_force_3d_adjacent(cells,a=properties['a'],s=properties['s'],degree=degree)*dt + np.sqrt(2*properties['D']*dt)*np.random.randn(len(properties['zposn']))
         
         max_nucl=np.array([min(i,1)for i in properties['nucl_pos']])
         #nucl_pos cannot exceed 1
@@ -1983,7 +2041,7 @@ def run_simulation_INM(x, timend,rand, sim_type):
         zposn_list=list(cells.properties['zposn'])
         cells.properties['nucl_pos']=np.array(zposn_list)
         history=run(simulation_with_division_model_6(cells,force,rand=rand),(timend)/dt,1.0/dt)     
-    if sim_type==10: #same as type 9 but with new crowding eqn
+    if sim_type==10: #same as type 9 but with 3d crowding to all degrees #slow
         cells.properties['k']=k
         cells.properties['D']=D
         cells.properties['s']=s
@@ -1991,14 +2049,33 @@ def run_simulation_INM(x, timend,rand, sim_type):
         zposn_list=list(cells.properties['zposn'])
         cells.properties['nucl_pos']=np.array(zposn_list)
         history=run(simulation_with_division_model_7(cells,force,rand=rand),(timend)/dt,1.0/dt)
-    if sim_type==11: #same as type 9 but with new crowding eqn
+    if sim_type==11: #same as type 9 but with 3d crowding to first degree
         cells.properties['k']=k
         cells.properties['D']=D
         cells.properties['s']=s
         cells.properties['a']=a
         zposn_list=list(cells.properties['zposn'])
         cells.properties['nucl_pos']=np.array(zposn_list)
-        history=run(simulation_with_division_model_8(cells,force,rand=rand),(timend)/dt,1.0/dt)
+        degree=1
+        history=run(simulation_with_division_model_8(cells,force,rand=rand,degree=degree),(timend)/dt,1.0/dt)
+    if sim_type==12: #same as type 9 but with 3d crowding to 2nd degree
+        cells.properties['k']=k
+        cells.properties['D']=D
+        cells.properties['s']=s
+        cells.properties['a']=a
+        zposn_list=list(cells.properties['zposn'])
+        cells.properties['nucl_pos']=np.array(zposn_list)
+        degree=2
+        history=run(simulation_with_division_model_8(cells,force,rand=rand,degree=degree),(timend)/dt,1.0/dt)
+    if sim_type==13: #same as type 9 but with 3d crowding to 3rd degree
+        cells.properties['k']=k
+        cells.properties['D']=D
+        cells.properties['s']=s
+        cells.properties['a']=a
+        zposn_list=list(cells.properties['zposn'])
+        cells.properties['nucl_pos']=np.array(zposn_list)
+        degree=3
+        history=run(simulation_with_division_model_8(cells,force,rand=rand,degree=degree),(timend)/dt,1.0/dt)
     return history
    
 
