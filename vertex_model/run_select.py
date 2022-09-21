@@ -283,7 +283,7 @@ def crowding_force_3d_adjacent(cells,a=0.1,s=0.1,degree=1):#degree is number of 
     force = np.bincount(cell_ids, f_pairs, cells.mesh.n_face) #sums
 
     return force
-def crowding_force_2(cells,a=0.1,s=0.1):
+def crowding_force_2(cells,serialised,a=0.1,s=0.1):
     """
     Modification of old crowding force equation to include interactions between non adjacent neighbours by using their x and y coordinates to position them
     we will only consider interactions with cells within 3 distance units of eachother
@@ -334,6 +334,19 @@ def crowding_force_2(cells,a=0.1,s=0.1):
     z_matrix=z_1-z_2
     #example of x componenet of vector connecting cell 1869 to cell 1879 
     #x_matrix[1869,1879]
+    
+    if serialised==True:
+        x_y_z_a_s_matrix_list=[None,None,None,None,None]
+        x_y_z_a_s_matrix_list[0]=x_matrix
+        x_y_z_a_s_matrix_list[1]=y_matrix
+        x_y_z_a_s_matrix_list[2]=z_matrix
+        x_y_z_a_s_matrix_list[3]=a
+        x_y_z_a_s_matrix_list[4]=s
+        euc_matrix=np.sqrt(x_matrix**2+y_matrix**2+z_matrix**2)
+        force_matrix=-a*np.exp(-(euc_matrix**2/s**2))*z_matrix/euc_matrix
+        forces_array=np.nansum(force_matrix,axis=1)
+    
+        return forces_array
     #block begins here
     #now we want to make a euclidian distance matrix #NOTE THIS IS JUST THE MAGNITUDE OF THE DISTANCE AND SIGNS ARE ALL POSITIVE
     
@@ -1634,7 +1647,7 @@ def simulation_with_division_model_6(cells,force,dt=dt,T1_eps=T1_eps,lifespan=10
 '''
 Same as model_6 except we are using new crowding force calculated via crowding_force_2()
 '''
-def simulation_with_division_model_7(cells,force,dt=dt,T1_eps=T1_eps,lifespan=100.0,rand=None):
+def simulation_with_division_model_7(cells,force,serialised,dt=dt,T1_eps=T1_eps,lifespan=100.0,rand=None,):
     lifespan=46800/460
     random.seed(1999)
     properties=cells.properties
@@ -1718,7 +1731,7 @@ def simulation_with_division_model_7(cells,force,dt=dt,T1_eps=T1_eps,lifespan=10
         # if iteration_tracker%1000==0:
         #     plt.hist2d(properties['age'],properties['nucl_pos'],norm=mpl.colors.LogNorm(),bins=500)
         #     plt.show()
-        properties['nucl_pos']=properties['nucl_pos']+properties['k(t)']*(properties['zposn']-properties['nucl_pos'])*dt + crowding_force_2(cells,a=properties['a'],s=properties['s'])*dt + np.sqrt(2*properties['D']*dt)*np.random.randn(len(properties['zposn']))
+        properties['nucl_pos']=properties['nucl_pos']+properties['k(t)']*(properties['zposn']-properties['nucl_pos'])*dt + crowding_force_2(cells,serialised=serialised,a=properties['a'],s=properties['s'])*dt + np.sqrt(2*properties['D']*dt)*np.random.randn(len(properties['zposn']))
         
         max_nucl=np.array([min(i,1)for i in properties['nucl_pos']])
         #nucl_pos cannot exceed 1
@@ -2048,7 +2061,7 @@ def run_simulation_INM(x, timend,rand, sim_type):
         cells.properties['a']=a
         zposn_list=list(cells.properties['zposn'])
         cells.properties['nucl_pos']=np.array(zposn_list)
-        history=run(simulation_with_division_model_7(cells,force,rand=rand),(timend)/dt,1.0/dt)
+        history=run(simulation_with_division_model_7(cells,force,rand=rand,serialised=False),(timend)/dt,1.0/dt)
     if sim_type==11: #same as type 9 but with 3d crowding to first degree
         cells.properties['k']=k
         cells.properties['D']=D
@@ -2076,9 +2089,17 @@ def run_simulation_INM(x, timend,rand, sim_type):
         cells.properties['nucl_pos']=np.array(zposn_list)
         degree=3
         history=run(simulation_with_division_model_8(cells,force,rand=rand,degree=degree),(timend)/dt,1.0/dt)
-    return history
-   
+    if sim_type==14: #same as type 10 with 3d crowding to all degrees (square matrix) but in a serialised (non paralell computing) manner
+        cells.properties['k']=k
+        cells.properties['D']=D
+        cells.properties['s']=s
+        cells.properties['a']=a
+        zposn_list=list(cells.properties['zposn'])
+        cells.properties['nucl_pos']=np.array(zposn_list)
+        history=run(simulation_with_division_model_7(cells,force,serialised=True,rand=rand),(timend)/dt,1.0/dt)    
 
+    return history
+    
 def calc_target_area(age,nucl_pos,r=1.6,max_value=2.5,c=0.25):
     #should work with arrays?
     return((max_value/2)/(1+np.exp(-r*(age-c)))*(1+nucl_pos**2))

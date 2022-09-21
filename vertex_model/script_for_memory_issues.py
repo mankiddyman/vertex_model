@@ -1,4 +1,5 @@
 
+#%%
 from __future__ import print_function  # for Python2
 import ctypes
 import sys
@@ -27,3 +28,4 @@ def check_memory():
 # %%
 free_memory()
 check_memory()
+# %%

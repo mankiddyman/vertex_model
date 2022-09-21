@@ -55,7 +55,7 @@ t_G1=0.4
 t_S=0.33
 t_G2=0.16
 t_M=0.11
-metadataframe=make_simulation_metadataframe()
+#metadataframe=make_simulation_metadataframe() #AARYAN CHANGE THIS TO RECALL A PREVIOUSLY GENERATED FILE?
 palette=['b','orange','green','red','purple']
 
 #%%
@@ -89,16 +89,23 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
     max_thermal_cell_index=max(df_master.loc[(df_master.time==1)].cell_index)
     df_master=df_master.query(f'cell_index > {max_thermal_cell_index}')
 
+    #going to record correspondance of file_index to experiment_names
+    binning_data_frame=pd.DataFrame(list(zip(list(df_master['file_index'].cat.categories),experiment_names)))
+    binning_data_frame.columns=['file_index','file_name']
+    binning_data_frame['nrow_df_alive_final_timepoint']=np.nan
+    binning_data_frame['nrow_df_dead_final_timepoint']=np.nan
+    binning_data_frame['nrow_df_alive']=np.nan
 #now histogram of Area segregated by seperator, additionally want labels of critical area.
     
     #first need to get only alive cells at final timepoint
     df_alive_final_timepoint=df_master.loc[(df_master.dead==False)&(df_master.time==306)]
+    
     #now i want to collect A seperated by seperator
     seperator_list=list(df_alive_final_timepoint[seperator].cat.categories)
     x=[[],[],[]]
     for i in range(0,len(seperator_list)):
         x[i]=(df_alive_final_timepoint.loc[(df_alive_final_timepoint[seperator]==seperator_list[i])]['apical_area'])
-    
+    binning_data_frame['nrow_df_alive_final_timepoint']=[len(i) for i in x]
     kwargs = dict(bins=bins_list[0],histtype='step',density=True)
     fig1, ax=plt.subplots(dpi=500)
     plt.subplots_adjust(left=0.2,bottom=0.2, top = 0.9, right = 0.9)
@@ -121,7 +128,7 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
     x=[[],[],[]]
     for i in range(0,len(seperator_list)):
         x[i]=(df_dead_final_timepoint.loc[(df_dead_final_timepoint[seperator]==seperator_list[i])]['age'])
-    
+    binning_data_frame['nrow_df_dead_final_timepoint']=[len(i) for i in x]
     kwargs = dict(bins=bins_list[1],histtype='step',density=True)
     fig2, ax=plt.subplots(dpi=500)
     plt.subplots_adjust(left=0.2,bottom=0.2, top = 0.9, right = 0.9)
@@ -146,7 +153,7 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
     x=[[],[],[]]
     for i in range(0,len(seperator_list)):
         x[i]=(df_alive_final_timepoint.loc[(df_alive_final_timepoint[seperator]==seperator_list[i])]['nucl_pos'])
-
+    binning_data_frame['nrow_df_alive_final_timepoint']=[len(i) for i in x]
     kwargs = dict(bins=bins_list[2],histtype='step',density=True)
     fig3, ax=plt.subplots(dpi=500)
     plt.subplots_adjust(left=0.2,bottom=0.2, top = 0.9, right = 0.9)
@@ -168,6 +175,7 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
     for i in range(0,len(seperator_list)):
         nuclear_positions[i]=df_alive.loc[(df_alive[seperator]==seperator_list[i])]['nucl_pos']
         ages[i]=df_alive.loc[(df_alive[seperator]==seperator_list[i])]['age']
+    binning_data_frame['nrow_df_alive']=[len(i)for i in nuclear_positions]
     fig4,ax=plt.subplots(dpi=500,)
     plt.hist2d(ages[0],nuclear_positions[0],bins=bins_list[3],norm=mpl.colors.LogNorm(),cmap='inferno')
     cb=plt.colorbar(label="$Log_{10}($Count in bin$)$")
@@ -392,8 +400,16 @@ def plot_3_histograms(experiment_names,bins_list,seperator,constant):
 #experiment_names=index_of_simulation(model_type="active",k_g1=0,d=1e-5,duration=306)[1][3:6]
 #after
 metadataframe=make_simulation_metadataframe()
+metadataframe['model_type']=metadataframe['model_type'].astype(str)
+
+
+#define model_type based on run_select.py
+type=str(9)
+model_type=str("active_"+type)
+
+
 #now we are gonna conduct analysis on type 9 - new age equation
-experiment_names=list(metadataframe.query('k_g1==0 and k_m==29 and model_type=="active_10"and D==1e-5 and duration==306.0 and 0.1<=a<=10').iloc[:,0])
+experiment_names=list(metadataframe.query(f'k_g1==0 and k_m==29 and model_type=="{model_type}" and D==1e-5 and duration==306.0 and 0.1<=a<=10').iloc[:,0])
 
 seperator='a'
 bins_list=[50,100,100,500,500,500,200,200,200]
@@ -404,7 +420,7 @@ for i in range(0,len(passive_model)):
     passive_model[i].savefig(os.path.join("output","passive_model",f"fig{i}.jpg"))
 
 
-experiment_names=list(metadataframe.query('a==0 and D==1e-5 and duration==306 and model_type=="active_10"and (k_g1==1 or k_g1==6 or k_g1==12)').iloc[:,0])
+experiment_names=list(metadataframe.query(f'a==0 and D==1e-5 and duration==306 and model_type=="{model_type}" and (k_g1==1 or k_g1==6 or k_g1==12)').iloc[:,0])
 seperator='k_g1'
 bins_list=[50,150,80,500,500,500,200,200,200]
 constant='a'
@@ -415,7 +431,7 @@ for i in range(0,len(passive_model)):
     active_model[i].savefig(os.path.join("output","active_model",f"fig{i}.jpg"))
 
 #now mixed model
-experiment_names=list(metadataframe.query('a==1 and D==1e-5 and model_type=="active_10" and duration==306 and (k_g1==1 or k_g1==6 or k_g1==12)').iloc[:,0])
+experiment_names=list(metadataframe.query(f'a==1 and D==1e-5 and model_type=="{model_type}" and duration==306 and (k_g1==1 or k_g1==6 or k_g1==12)').iloc[:,0])
 
 seperator='k_g1'
 bins_list=[50,150,80,500,500,500,200,200,200]
@@ -426,7 +442,7 @@ for i in range(0,len(mixed_model_constant_a)):
     mixed_model_constant_a[i].savefig(os.path.join("output","mixed_model_constant_a",f"fig{i}.jpg"))
 
 
-experiment_names=list(metadataframe.query('k_g1==6 and duration ==306 and model_type=="active_10" and  D==1e-5 and a!=0').iloc[:,0])
+experiment_names=list(metadataframe.query(f'k_g1==6 and duration ==306 and model_type=="{model_type}" and  D==1e-5 and a!=0').iloc[:,0])
 seperator='a'
 bins_list=[50,150,80,500,500,500,200,200,200]
 constant='k_g1'
@@ -439,7 +455,7 @@ for i in range(0,len(mixed_model_constant_k_g1)):
 #now plotting new experiments with a<0.1
 #so far we have explored a=[1e1,1e0,1e-1]
 #now gonna do a=[1e-2,1e-3,1e-4]
-experiment_names=list(metadataframe.query('k_g1==0 and k_m==29 and duration ==306 and model_type=="active_10" and D==1e-5 and 1e-5<a<=1e-2').iloc[:,0])
+experiment_names=list(metadataframe.query(f'k_g1==0 and k_m==29 and duration ==306 and model_type=="{model_type}" and D==1e-5 and 1e-5<a<=1e-2').iloc[:,0])
 seperator='a'
 bins_list=[50,150,80,500,500,500,200,200,200]
 constant='k_g1'

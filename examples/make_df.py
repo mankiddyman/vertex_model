@@ -7,6 +7,6 @@ import vertex_model.timer as timer
 timestart = time.time()
 i=int(sys.argv[1])
 make_df(i)
-print("aaryan",i)
+print("metadata_index ",i)
 timeend = time.time()
 timer.timer(timestart,timeend)

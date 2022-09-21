@@ -237,9 +237,22 @@ def make_simulation_metadataframe(): #will make a dataframe containing simulatio
     parameters=[]
     for i in range(0,len(all_sims)):
         parameters.append(retrieve_sim_metadata(all_sims[i]))
+        #load the file
+        a=os.path.join("simulations",all_sims[i][:-3]+"csv")
+        df_master=pd.read_csv(a)
+        #applying thermalised cells filter
+        max_thermal_cell_index=max(df_master.loc[(df_master.time==1)].cell_index)
+        df_master=df_master.query(f'cell_index > {max_thermal_cell_index}')
+
+        df_alive_final_timepoint=df_master.loc[(df_master.dead==False)&(df_master.time==306)]
+        df_dead_final_timepoint=df_master.loc[(df_master.dead==True)&(df_master.time==306)]
+        df_alive=df_master.loc[(df_master.dead==False)]
+        nrow_list=[i.shape[0] for i in [df_alive_final_timepoint,df_dead_final_timepoint,df_alive]]
+        parameters.extend(nrow_list)
     df=pd.DataFrame(parameters)
-    df.columns=['file_name','model_type','k_g1','k_s','k_g2','k_m','D','a','run','duration']
+    df.columns=['file_name','model_type','k_g1','k_s','k_g2','k_m','D','a','run','duration','nrow_df_alive_final_timepoint','nrow_df_alive_final_timepoint','nrow_df_alive']
     
+   
     
     return(df)
 #%%
